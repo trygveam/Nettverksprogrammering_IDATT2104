@@ -8,17 +8,16 @@
 
 using namespace std;
 
-struct WorkerPool
+struct Workers
 {
     vector<thread> threads;
     list<function<void()>> tasks;
     mutex tasks_mutex;
     condition_variable tasks_cv;
-
     int thread_count;
     bool join_called;
 
-    explicit WorkerPool(int threads)
+    explicit Workers(int threads)
     {
         thread_count = threads;
         join_called = true;
@@ -37,27 +36,31 @@ struct WorkerPool
         {
             threads.emplace_back([i, this]
                                  {
-                while(true) {
-                    function<void()> task;
-                    {
-                        unique_lock<mutex> lock(tasks_mutex);
-                        while(tasks.empty()) {
-                            cout << to_string(i) + " no tasks \n";
-                            if(join_called) return;
-                            cout << to_string(i) + " sleep \n";
-                            tasks_cv.wait(lock);
-                            cout << to_string(i) + " woke up \n";
-                        }
+                                     while (true)
+                                     {
+                                         function<void()> task;
+                                         {
+                                             unique_lock<mutex> lock(tasks_mutex);
+                                             while (tasks.empty())
+                                             {
+                                                 cout << to_string(i) + " no tasks to work on \n";
+                                                 if (join_called)
+                                                     return;
+                                                 cout << to_string(i) + " sleeping \n";
+                                                 tasks_cv.wait(lock);
+                                                 cout << to_string(i) + " got woke up \n";
+                                             }
 
-                        task = *tasks.begin();
-                        tasks.pop_front();
-
-                    }
-                    if(task) {
-                        cout << to_string(i) + ": Running task.\n";
-                        task();
-                    }
-                } });
+                                             task = *tasks.begin();
+                                             tasks.pop_front();
+                                         }
+                                         if (task)
+                                         {
+                                             cout << to_string(i) + ": Running task.\n";
+                                             task();
+                                         }
+                                     }
+                                 });
         }
     }
 
@@ -72,8 +75,9 @@ struct WorkerPool
     {
         post([&f, timeout_ms]
              {
-            this_thread::sleep_for(chrono::milliseconds(timeout_ms));
-            f(); });
+                 this_thread::sleep_for(chrono::milliseconds(timeout_ms));
+                 f();
+             });
     }
 
     void join()
@@ -83,28 +87,29 @@ struct WorkerPool
         for (auto &thread : threads)
         {
             thread.join();
-            cout << "Thread returned.\n";
+            cout << " thread returned:\n";
         }
     }
 };
 
 int main()
 {
-    WorkerPool worker_threads(3);
+    Workers worker_threads(3);
 
-    worker_threads.start(); // Create internal threads
+    worker_threads.start();
 
     worker_threads.post([]
-                        { cout << "Function 1 running.\n"; });
+                        { cout << "Function 1 running in thread: "
+                               << this_thread::get_id() << endl; });
     worker_threads.post([]
-                        { cout << "Function 2 running.\n"; });
+                        { cout << "Function 2 running in thread: "
+                               << this_thread::get_id() << endl; });
     worker_threads.post([]
-                        { cout << "Function 3 running.\n"; });
+                        { cout << "Function 3 running in thread: "
+                               << this_thread::get_id() << endl; });
     worker_threads.post_timeout([]
-                                { cout << "Function 4 running.\n"; },
+                                { cout << "Function 4 running on thread: " << this_thread::get_id() << endl; },
                                 4000);
-
-    cout << "Calling join.\n";
     worker_threads.join(); // Calls join() on the worker threads
 
     return 0;
