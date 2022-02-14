@@ -13,7 +13,7 @@ struct Workers
     vector<thread> threads;
     list<function<void()>> tasks;
     mutex tasks_mutex;
-    condition_variable tasks_cv;
+    condition_variable cv;
     int thread_count;
     bool join_called;
 
@@ -47,7 +47,7 @@ struct Workers
                                                  if (join_called)
                                                      return;
                                                  cout << to_string(i) + " sleeping \n";
-                                                 tasks_cv.wait(lock);
+                                                 cv.wait(lock);
                                                  cout << to_string(i) + " got woke up \n";
                                              }
 
@@ -59,8 +59,7 @@ struct Workers
                                              cout << to_string(i) + ": Running task.\n";
                                              task();
                                          }
-                                     }
-                                 });
+                                     } });
         }
     }
 
@@ -68,7 +67,7 @@ struct Workers
     {
         unique_lock<mutex> lock(tasks_mutex);
         tasks.emplace_back(f);
-        tasks_cv.notify_one();
+        cv.notify_one();
     }
 
     void post_timeout(const function<void()> &f, long timeout_ms)
@@ -76,14 +75,13 @@ struct Workers
         post([&f, timeout_ms]
              {
                  this_thread::sleep_for(chrono::milliseconds(timeout_ms));
-                 f();
-             });
+                 f(); });
     }
 
     void join()
     {
         join_called = true;
-        tasks_cv.notify_all();
+        cv.notify_all();
         for (auto &thread : threads)
         {
             thread.join();
@@ -96,7 +94,10 @@ int main()
 {
     Workers worker_threads(3);
 
+    Workers event_loop(1);
+
     worker_threads.start();
+    event_loop.start();
 
     worker_threads.post([]
                         { cout << "Function 1 running in thread: "
@@ -107,10 +108,20 @@ int main()
     worker_threads.post([]
                         { cout << "Function 3 running in thread: "
                                << this_thread::get_id() << endl; });
+    event_loop.post([]
+                    { cout << "Event loop function 1 running in thread: "
+                           << this_thread::get_id() << endl; });
+
+    event_loop.post([]
+                    { cout << "Event loop function 2 running in thread: "
+                           << this_thread::get_id() << endl; });
+
     worker_threads.post_timeout([]
                                 { cout << "Function 4 running on thread: " << this_thread::get_id() << endl; },
                                 4000);
-    worker_threads.join(); // Calls join() on the worker threads
+    this_thread::sleep_for(chrono::milliseconds(2000));
+    worker_threads.join();
+    event_loop.join();
 
     return 0;
 }
