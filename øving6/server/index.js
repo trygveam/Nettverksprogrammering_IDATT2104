@@ -5,14 +5,14 @@ const crypto = require("crypto");
 
 const generateAcceptValue = acceptKey =>
   crypto
+    // Creating sha1 hash function
     .createHash("sha1")
     .update(acceptKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", "binary")
     .digest("base64");
 
-
-// Simple HTTP server responds with a simple WebSocket client test
 const httpServer = net.createServer((connection) => {
   connection.on('data', () => {
+    // Sending pure html Code to server
     let content = `<!DOCTYPE html>
 <html>
   <head>
@@ -47,20 +47,18 @@ httpServer.listen(3000, () => {
   console.log('HTTP server listening on port 3000');
 });
 
-//håndtere flere klienter
+// Array to handle multiple clients
 let clients = [];
-// Incomplete WebSocket server
 const wsServer = net.createServer((connection) => {
     
   console.log('Client connected');
 
   connection.on('data', data => {
-    //For å utføre handshake
     if(data.toString()[0] == "G") {
-        //For å få nøkkelen tar vi substring fra og + med 6 ettersom det er 6 plasser til nøkkelen starter til == + 2(for å få med ==)
+        // Key is generated from data 'Sec-WebSocket-Key: toTjWN1bpNz0ovaFNiBZBA==''
         var key = data.toString().substring(data.toString().indexOf("-Key: ") + 6, data.toString().indexOf("==") + 2);
 
-        //genererer en accept value basert på nøkkelen
+        // Generating acceptvalue based on key
         var acceptValue = generateAcceptValue(key);
 
         const respons = [
@@ -71,23 +69,23 @@ const wsServer = net.createServer((connection) => {
         ];
         connection.write(respons.join("\r\n") + "\r\n\r\n");
         clients.push(connection);
-        console.log("Handshake utført")
-    //For å sende melding til d andre klientene
+        console.log("Handshake complete")
+        // If not handshake, code to handle messages
     } else {
-        let melding = "";
+        let message = "";
         let length = data[1] & 127;
         let maskStart = 2;
         let dataStart = maskStart + 4;
         for(let i = dataStart; i < dataStart + length; i++) {
             let byte = data[i] ^ data[maskStart + ((i - dataStart) % 4)];
-            melding += String.fromCharCode(byte);
+            message += String.fromCharCode(byte);
         }
-        console.log(melding);
-        sendMeldingTilKlienter(melding, connection);
+        console.log(message);
+        sendMessage(message, connection);
     }
   });
 
-  const sendMeldingTilKlienter = (message, c) => {
+  const sendMessage = (message, c) => {
     let buffer = Buffer.concat([
       new Buffer.from([
         0x81,
